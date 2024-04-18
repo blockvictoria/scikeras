@@ -34,18 +34,12 @@ def _get_temp_folder() -> Iterator[str]:
                     dest = os.path.join(root, filename)
                     tf_io.gfile.remove(dest)
 
-def qloss_multi(y_true, y_pred):
-    qs=np.array([0.01, 0.05, 0.50, 0.95, 0.99])
-    qs_array = np.array([qs])#.reshape(-1, )
-    q = tf.constant(qs_array, dtype=tf.float32)
-    #y_pred = tf.stack(tf.split(y_pred, blocks_ahead, axis=1))
-    y_pred = tf.stack(tf.split(y_pred, len(blocks_ahead), axis=1))
-    
-    e = y_true - tf.transpose(y_pred)
-    lh = q*tf.transpose(e)
-    rh = (q-1)*tf.transpose(e)  
-    v = tf.maximum(lh, rh) 
-    return K.mean(v)
+def qloss(y_true, y_pred):
+      # Pinball loss for multiple quantiles
+      q = tf.constant(np.array([qs]), dtype=tf.float32)
+      e = y_true - y_pred
+      v = tf.maximum(q*e, (q-1)*e)
+      return K.mean(v)
     
 def unpack_keras_model(
     packed_keras_model: np.ndarray,
@@ -59,7 +53,7 @@ def unpack_keras_model(
                 tf_io.gfile.makedirs(os.path.dirname(dest))
                 with tf_io.gfile.GFile(dest, "wb") as f:
                     f.write(archive.extractfile(fname).read())
-        model: keras.Model = load_model(temp_dir, custom_objects = {"qloss_multi": qloss_multi})
+        model: keras.Model = load_model(temp_dir, custom_objects = {"qloss": qloss})
         model.load_weights(temp_dir)
         model.optimizer.build(model.trainable_variables)
         return model
